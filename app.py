@@ -164,29 +164,97 @@ def add_hover(p, source, info_div):
     tap_cb = CustomJS(args=dict(source=source, div=info_div), code="""
         const idx = source.selected.indices;
         if (idx.length === 0) { div.text = ""; return; }
+
         const i = idx[0];
         const d = source.data;
+
         var involved = [];
         if (d.DRUNK_DR[i] > 0) involved.push("Drunk Driver");
         if (d.PEDS[i]    > 0) involved.push("Pedestrian");
         if (d.PBICYC[i]  > 0) involved.push("Cyclist");
         if (involved.length === 0) involved.push("None flagged");
-        div.text =
-            '<div style="font-family:sans-serif;padding:10px 0;">' +
-            '<p style="color:#4a90d9;font-size:10px;text-transform:uppercase;letter-spacing:0.08em;font-weight:600;margin:0 0 8px;">Crash Details</p>' +
-            '<table style="width:100%;border-collapse:collapse;">' +
-            '<tr><td style="color:#555;font-size:10px;text-transform:uppercase;padding:3px 0;border-bottom:1px solid #1e1e3a;">Location</td><td style="color:#e0e0e0;font-size:11px;text-align:right;padding:3px 0;border-bottom:1px solid #1e1e3a;">' + d.STATE_NAME[i] + '</td></tr>' +
-            '<tr><td style="color:#555;font-size:10px;text-transform:uppercase;padding:3px 0;border-bottom:1px solid #1e1e3a;">Date</td><td style="color:#e0e0e0;font-size:11px;text-align:right;padding:3px 0;border-bottom:1px solid #1e1e3a;">' + d.MONTH[i] + '/' + d.DAY[i] + '/' + d.YEAR[i] + '</td></tr>' +
-            '<tr><td style="color:#555;font-size:10px;text-transform:uppercase;padding:3px 0;border-bottom:1px solid #1e1e3a;">Time</td><td style="color:#e0e0e0;font-size:11px;text-align:right;padding:3px 0;border-bottom:1px solid #1e1e3a;">' + d.HOUR_STR[i] + '</td></tr>' +
-            '<tr><td style="color:#555;font-size:10px;text-transform:uppercase;padding:3px 0;border-bottom:1px solid #1e1e3a;">Fatalities</td><td style="color:#e0e0e0;font-size:11px;text-align:right;padding:3px 0;border-bottom:1px solid #1e1e3a;">' + d.FATALS[i] + '</td></tr>' +
-            '<tr><td style="color:#555;font-size:10px;text-transform:uppercase;padding:3px 0;">Involved</td><td style="color:#e0e0e0;font-size:11px;text-align:right;padding:3px 0;">' + involved.join(", ") + '</td></tr>' +
-            '</table></div>';
+
+        const x = d.x[i];
+        const y = d.y[i];
+        const k = 6378137;
+        const lng = (x / k) * (180 / Math.PI);
+        const lat = (2 * Math.atan(Math.exp(y / k)) - Math.PI / 2) * (180 / Math.PI);
+
+        const apiKey = "AIzaSyAh1f2MC_LgXkyMOewvsEK21fdGiJL8jUY";
+        const svThumb = "https://maps.googleapis.com/maps/api/streetview?size=400x220&location=" + lat + "," + lng + "&fov=80&heading=70&pitch=0&key=" + apiKey;
+
+        function mkRow(label, value, color) {
+            var c = color ? color : "#e0e0e0";
+            return "<tr><td style='color:#555;font-size:10px;text-transform:uppercase;padding:3px 0;width:90px;'>" + label + "</td><td style='color:" + c + ";font-size:11px;font-weight:500;padding:3px 0;'>" + value + "</td></tr>";
+        }
+
+        window._sv_lat = lat;
+        window._sv_lng = lng;
+        window._sv_key = apiKey;
+
+        window._sv_open = function() {
+            var old = document.getElementById("sv-overlay");
+            if (old) old.remove();
+
+            var ov = document.createElement("div");
+            ov.id = "sv-overlay";
+            ov.style.cssText = "position:fixed;inset:0;background:rgba(0,0,0,0.88);z-index:99999;display:flex;flex-direction:column;align-items:center;justify-content:center;";
+
+            var panoDiv = document.createElement("div");
+            panoDiv.id = "sv-pano";
+            panoDiv.style.cssText = "width:90vw;height:80vh;border-radius:10px;overflow:hidden;";
+
+            var btn = document.createElement("button");
+            btn.textContent = "Close";
+            btn.style.cssText = "margin-top:16px;background:#1a1a2e;color:#e0e0e0;border:1px solid #2a2a4a;border-radius:20px;padding:8px 28px;font-size:13px;cursor:pointer;";
+            btn.onclick = function() { ov.remove(); };
+
+            ov.appendChild(panoDiv);
+            ov.appendChild(btn);
+            document.body.appendChild(ov);
+
+            function initPano() {
+                var pano = new google.maps.StreetViewPanorama(panoDiv, {
+                    position: { lat: window._sv_lat, lng: window._sv_lng },
+                    pov: { heading: 70, pitch: 0 },
+                    zoom: 1,
+                    addressControl: false,
+                    fullscreenControl: false
+                });
+            }
+
+            if (typeof google !== "undefined" && google.maps) {
+                initPano();
+            } else {
+                var script = document.createElement("script");
+                script.src = "https://maps.googleapis.com/maps/api/js?key=" + window._sv_key + "&callback=_sv_initPano";
+                window._sv_initPano = initPano;
+                document.head.appendChild(script);
+            }
+        };
+
+        var html = "<div style='font-family:sans-serif;padding:10px 0;'>";
+        html += "<p style='color:#4a90d9;font-size:10px;text-transform:uppercase;font-weight:600;margin:0 0 8px;'>Crash Details</p>";
+        html += "<table style='width:100%;border-collapse:collapse;'>";
+        html += mkRow("State",      d.STATE_NAME[i]);
+        html += mkRow("Date",       d.MONTH[i] + "/" + d.DAY[i] + "/" + d.YEAR[i]);
+        html += mkRow("Time",       d.HOUR_STR[i]);
+        html += mkRow("Fatalities", d.FATALS[i], "#ff4444");
+        html += mkRow("Involved",   involved.join(", "), "#ffd700");
+        html += "</table>";
+        html += "<div style='margin-top:12px;'>";
+        html += "<p style='color:#555;font-size:10px;text-transform:uppercase;margin:0 0 6px;'>Street View</p>";
+        html += "<img src='" + svThumb + "' onclick='window._sv_open()' style='width:100%;border-radius:6px;border:1px solid #2a2a4a;display:block;cursor:pointer;' />";
+        html += "<p style='color:#555;font-size:10px;margin:5px 0 0;text-align:center;'>Click image to explore Street View</p>";
+        html += "</div></div>";
+
+        div.text = html;
     """)
     source.selected.js_on_change("indices", tap_cb)
     p.add_tools(TapTool(renderers=[pts]))
 
 def filter_df(year_str, state_val, drunk_val, ped_val, bike_val,
-              h_min, h_max, age_val="All"):
+            h_min, h_max, age_val="All"):
     if "-" in str(year_str) and len(year_str) == 9:
         y1, y2 = int(year_str[:4]), int(year_str[5:])
         chunks = [df_by_year[yr] for yr in range(y1, y2 + 1) if yr in df_by_year]
@@ -224,23 +292,23 @@ def to_source(t):
         t = t.sample(DOT_LIMIT, random_state=42)
     return {col: t[col].tolist() for col in
             ["x","y","color","STATE_NAME","MONTH","DAY","YEAR",
-             "HOUR_STR","FATALS","DRUNK_DR","PEDS","PBICYC"]}
+            "HOUR_STR","FATALS","DRUNK_DR","PEDS","PBICYC"]}
 
 minimal_css = Div(sizing_mode="stretch_width", text="""
-<style>
-html, body, .bk-root { background: #0d0d1a !important; margin:0; padding:0; }
-.noUi-connect  { background: #555 !important; }
-.noUi-handle   { background: #e0e0e0 !important; border:none !important; border-radius:50% !important; box-shadow:none !important; }
-.noUi-base, .noUi-target { background: #2a2a4a !important; border:none !important; border-radius:4px !important; }
-.bk-tab        { background:#0d0d1a !important; color:#555 !important; border:none !important; border-bottom:2px solid transparent !important; border-radius:0 !important; padding:14px 32px !important; font-size:14px !important; font-weight:500 !important; letter-spacing:0.04em !important; text-transform:uppercase !important; }
-.bk-tab.bk-active { background:#0d0d1a !important; color:#e0e0e0 !important; border-bottom:2px solid #4a90d9 !important; }
-.bk-tab:hover  { color:#aaa !important; }
-.bk-tabs-header { background:#0d0d1a !important; border-bottom:1px solid #1e1e3a !important; padding:0 16px !important; }
-.bk-btn-default { background:transparent !important; border:1px solid #333 !important; color:#888 !important; border-radius:20px !important; font-size:12px !important; }
-.bk-btn-default:hover { border-color:#555 !important; color:#bbb !important; }
-.bk-btn-primary { background:#4a90d9 !important; border-color:#4a90d9 !important; color:#fff !important; border-radius:20px !important; font-size:13px !important; font-weight:600 !important; }
-.bk-btn-primary:hover { background:#5aa0e9 !important; }
-</style>
+    <style>
+    html, body, .bk-root { background: #0d0d1a !important; margin:0; padding:0; }
+    .noUi-connect  { background: #555 !important; }
+    .noUi-handle   { background: #e0e0e0 !important; border:none !important; border-radius:50% !important; box-shadow:none !important; }
+    .noUi-base, .noUi-target { background: #2a2a4a !important; border:none !important; border-radius:4px !important; }
+    .bk-tab        { background:#0d0d1a !important; color:#555 !important; border:none !important; border-bottom:2px solid transparent !important; border-radius:0 !important; padding:14px 32px !important; font-size:14px !important; font-weight:500 !important; letter-spacing:0.04em !important; text-transform:uppercase !important; }
+    .bk-tab.bk-active { background:#0d0d1a !important; color:#e0e0e0 !important; border-bottom:2px solid #4a90d9 !important; }
+    .bk-tab:hover  { color:#aaa !important; }
+    .bk-tabs-header { background:#0d0d1a !important; border-bottom:1px solid #1e1e3a !important; padding:0 16px !important; }
+    .bk-btn-default { background:transparent !important; border:1px solid #333 !important; color:#888 !important; border-radius:20px !important; font-size:12px !important; }
+    .bk-btn-default:hover { border-color:#555 !important; color:#bbb !important; }
+    .bk-btn-primary { background:#4a90d9 !important; border-color:#4a90d9 !important; color:#fff !important; border-radius:20px !important; font-size:13px !important; font-weight:600 !important; }
+    .bk-btn-primary:hover { background:#5aa0e9 !important; }
+    </style>
 """)
 
 legend_div = Div(width=200, text=f"""
@@ -364,7 +432,7 @@ p1 = make_map("FARS Fatal Accident Visualization")
 s1 = make_source()
 
 info_div1 = Div(width=W, text='<p style="color:#333;font-size:11px;font-family:sans-serif;padding:8px 10px;margin:0;">Click any dot on the map</p>',
-                styles={"background":"#111827","border-radius":"8px","border":"1px solid #1e1e3a","min-height":"40px"})
+                styles={"background":"#111827","border-radius":"8px","border":"1px solid #1e1e3a","min-height":"300px"})
 add_hover(p1, s1, info_div1)
 
 address_input = style(TextInput(title="Search Location", placeholder="Search address or city..."))
@@ -477,8 +545,8 @@ tab1_layout = row(sidebar1, p1, sizing_mode="stretch_both")
 p_left,  p_right    = make_map(""), make_map("")
 src_left, src_right = make_source(), make_source()
 
-info_div_L = Div(width=180, text="", styles={"background":"#0d0d1a","border-radius":"8px","border":"1px solid #1e1e3a","padding":"0 10px","min-height":"20px","margin-top":"6px"})
-info_div_R = Div(width=180, text="", styles={"background":"#0d0d1a","border-radius":"8px","border":"1px solid #1e1e3a","padding":"0 10px","min-height":"20px","margin-top":"6px"})
+info_div_L = Div(width=180, text="", styles={"background":"#0d0d1a","border-radius":"8px","border":"1px solid #1e1e3a","padding":"0 10px","min-height":"300px","margin-top":"6px"})
+info_div_R = Div(width=180, text="", styles={"background":"#0d0d1a","border-radius":"8px","border":"1px solid #1e1e3a","padding":"0 10px","min-height":"300px","margin-top":"6px"})
 add_hover(p_left,  src_left,  info_div_L)
 add_hover(p_right, src_right, info_div_R)
 
