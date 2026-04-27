@@ -287,8 +287,8 @@ def filter_df(year_str, state_val, drunk_val, ped_val, bike_val,
         t = t[t["HAS_OLDER"] > 0]
     return t
 
-def to_source(t):
-    if len(t) > DOT_LIMIT:
+def to_source(t, limit=True):
+    if limit and len(t) > DOT_LIMIT:
         t = t.sample(DOT_LIMIT, random_state=42)
     return {col: t[col].tolist() for col in
             ["x","y","color","STATE_NAME","MONTH","DAY","YEAR",
@@ -835,11 +835,137 @@ chart_grid = column(
 
 tab3_layout = row(chart_sidebar, chart_grid, sizing_mode="stretch_both")
 
+# ── PLAYBACK TAB ──────────────────────────────────────────────
+p_pb = make_map("")
+src_pb = make_source()
+info_div_pb = Div(width=200, text="", styles={"background":"#111827","border-radius":"8px","border":"1px solid #1e1e3a","min-height":"300px"})
+add_hover(p_pb, src_pb, info_div_pb)
+
+pb_year_div = Div(text='<div style="font-family:sans-serif;text-align:center;padding:10px 0 4px;"><span style="color:#4a90d9;font-size:52px;font-weight:700;letter-spacing:0.04em;">2001-2005</span></div>', sizing_mode="stretch_width")
+
+pb_play_btn  = Button(label="▶  Play", button_type="primary", width=120)
+pb_stop_btn  = Button(label="⏹  Stop",  button_type="danger",   width=120)
+pb_prev_btn  = Button(label="◀",        button_type="default",  width=60)
+pb_next_btn  = Button(label="▶",        button_type="default",  width=60)
+pb_speed_sel = style(Select(title="Speed", value="1.5s", options=["0.5s","1s","1.5s","2s","3s"]), 120)
+pb_state_sel = style(Select(title="State", value="All", options=states), 160)
+pb_drunk_sel = style(Select(title="Drunk Drivers", value="All", options=["All","Drunk Drivers Involved","No Drunk Drivers"]), 160)
+pb_ped_sel   = style(Select(title="Pedestrian",    value="All", options=["All","Pedestrian Involved","No Pedestrian"]), 160)
+pb_bike_sel  = style(Select(title="Cyclist",       value="All", options=["All","Cyclist Involved","No Cyclist"]), 160)
+
+pb_stats_div = Div(width=200, text="", styles={"background":"#111827","border-radius":"8px","border":"1px solid #1e1e3a","padding":"10px 12px","font-family":"sans-serif"})
+
+_pb_state = {"running": False, "callback": None, "idx": 0}
+
+def pb_update_map():
+    yr = str(all_years[_pb_state["idx"]])
+    pb_year_div.text = (
+        '<div style="font-family:sans-serif;text-align:center;padding:10px 0 4px;">'
+        '<span style="color:#4a90d9;font-size:52px;font-weight:700;letter-spacing:0.04em;">' + yr + '</span>'
+        '<span style="color:#555;font-size:13px;display:block;margin-top:2px;text-transform:uppercase;letter-spacing:0.1em;">Showing fatal crashes</span>'
+        '</div>'
+    )
+    t = filter_df(str(yr), pb_state_sel.value, pb_drunk_sel.value,
+                  pb_ped_sel.value, pb_bike_sel.value, 0, 23)
+    n = len(t)
+    fatals = int(t["FATALS"].sum())
+    pb_stats_div.text = (
+        '<p style="color:#555;font-size:10px;text-transform:uppercase;letter-spacing:0.05em;margin:0 0 8px;">Period Summary</p>'
+        '<div style="display:flex;justify-content:space-between;padding:3px 0;border-bottom:1px solid #1e1e3a;">'
+        '<span style="color:#555;font-size:10px;">Crashes</span>'
+        '<span style="color:#ff8c00;font-size:12px;font-weight:600;">' + f"{n:,}" + '</span></div>'
+        '<div style="display:flex;justify-content:space-between;padding:3px 0;border-bottom:1px solid #1e1e3a;">'
+        '<span style="color:#555;font-size:10px;">Fatalities</span>'
+        '<span style="color:#ff4444;font-size:12px;font-weight:600;">' + f"{fatals:,}" + '</span></div>'
+        '<div style="display:flex;justify-content:space-between;padding:3px 0;">'
+        '<span style="color:#555;font-size:10px;">Drunk Driver %</span>'
+        '<span style="color:#e0e0e0;font-size:12px;font-weight:600;">' +
+        (f"{round(len(t[t['DRUNK_DR']>0])/n*100,1)}%" if n > 0 else "N/A") +
+        '</span></div>'
+    )
+    src_pb.data = to_source(t, limit=(pb_state_sel.value == "All"))
+
+def pb_step():
+    _pb_state["idx"] = (_pb_state["idx"] + 1) % len(all_years)
+    pb_update_map()
+
+def pb_start_stop(running):
+    speed_map = {"0.5s": 500, "1s": 1000, "1.5s": 1500, "2s": 2000, "3s": 3000}
+    if running:
+        _pb_state["running"] = True
+        ms = speed_map.get(pb_speed_sel.value, 1500)
+        _pb_state["callback"] = curdoc().add_periodic_callback(pb_step, ms)
+        pb_play_btn.label = "⏸  Pause"
+    else:
+        _pb_state["running"] = False
+        if _pb_state["callback"]:
+            curdoc().remove_periodic_callback(_pb_state["callback"])
+            _pb_state["callback"] = None
+        pb_play_btn.label = "▶  Play"
+
+def pb_play_click(n):
+    pb_start_stop(not _pb_state["running"])
+
+def pb_stop_click(n):
+    pb_start_stop(False)
+    _pb_state["idx"] = 0
+    pb_update_map()
+
+def pb_prev_click(n):
+    _pb_state["idx"] = (_pb_state["idx"] - 1) % len(all_years)
+    pb_update_map()
+
+def pb_next_click(n):
+    _pb_state["idx"] = (_pb_state["idx"] + 1) % len(all_years)
+    pb_update_map()
+
+def pb_filter_change(attr, old, new):
+    pb_update_map()
+
+pb_play_btn.on_click(pb_play_click)
+pb_stop_btn.on_click(pb_stop_click)
+pb_prev_btn.on_click(pb_prev_click)
+pb_next_btn.on_click(pb_next_click)
+for w in [pb_state_sel, pb_drunk_sel, pb_ped_sel, pb_bike_sel]:
+    w.on_change("value", pb_filter_change)
+
+pb_controls_row = row(
+    pb_prev_btn, pb_play_btn, pb_next_btn, pb_stop_btn, pb_speed_sel,
+    sizing_mode="fixed",
+    styles={"gap":"8px","align-items":"flex-end","padding":"8px 16px","background":"#0d0d1a","border-bottom":"1px solid #1e1e3a"}
+)
+
+pb_sidebar = column(
+    Div(width=200, text=f'<div style="padding:4px 0 12px;border-bottom:1px solid #1e1e3a;font-family:sans-serif;"><p style="color:{TEXT_LIGHT};font-size:14px;font-weight:600;margin:0 0 2px;">Playback</p><p style="color:{TEXT_DIM};font-size:11px;margin:0;">Animate crashes by year</p></div>'),
+    pb_state_sel, pb_drunk_sel, pb_ped_sel, pb_bike_sel,
+    divider(),
+    pb_stats_div,
+    divider(),
+    Div(width=200, text='<p style="color:#555;font-size:10px;font-family:sans-serif;text-transform:uppercase;letter-spacing:0.05em;margin:10px 0 4px;">Click a dot to inspect</p>'),
+    info_div_pb,
+    width=220, sizing_mode="fixed",
+    styles={"background":DARK_BG,"padding":"16px 14px","overflow-y":"auto","height":"100vh","border-right":"1px solid #1e1e3a","box-sizing":"border-box"}
+)
+
+pb_top = column(
+    pb_year_div,
+    pb_controls_row,
+    sizing_mode="stretch_width",
+    styles={"background":"#0d0d1a"}
+)
+
+pb_map_col = column(pb_top, p_pb, sizing_mode="stretch_both")
+tab5_layout = row(pb_sidebar, pb_map_col, sizing_mode="stretch_both")
+
+pb_update_map()
+# ── END PLAYBACK TAB ───────────────────────────────────────────
+
 tab1 = TabPanel(child=tab1_layout, title="Heatmap")
 tab2 = TabPanel(child=tab2_layout, title="Year Comparison")
 tab3 = TabPanel(child=tab3_layout, title="Charts")
 tab4 = TabPanel(child=tour_layout, title="Tour")
-tabs = Tabs(tabs=[tab1, tab2, tab3, tab4], sizing_mode="stretch_both")
+tab5 = TabPanel(child=tab5_layout, title="Playback")
+tabs = Tabs(tabs=[tab1, tab2, tab3, tab4, tab5], sizing_mode="stretch_both")
 
 tour_tabs_ref[0] = tabs
 
