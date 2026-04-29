@@ -58,13 +58,9 @@ def assign_color(row):
         return "#ff8c00"
 
 df = pd.read_parquet("/home/ubuntu/fars_cache.parquet")
-print("Loaded", len(df), "rows from cache")
 
 k = 6378137
-
-print("Building year index...")
 df_by_year = {yr: grp.reset_index(drop=True) for yr, grp in df.groupby("YEAR")}
-print("Year index built for years:", sorted(df_by_year.keys()))
 
 states = ["All"] + sorted(df["STATE_NAME"].unique().tolist())
 years  = sorted(df["YEAR_STR"].unique().tolist(), reverse=True)
