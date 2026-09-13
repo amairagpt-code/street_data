@@ -1,0 +1,12 @@
+*.parquet
+venv/
+__pycache__/
+*.pyc
+.aws/
+.ssh/
+*.pem
+.bash_history
+.cache/
+.local/
+snap/
+nginx-default.bak
