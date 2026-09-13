@@ -90,7 +90,7 @@ default_5yr = years_5yr[-1] if years_5yr else f"{min_year}-{max_year}"
 USA_X_MIN, USA_X_MAX = -14471534, -7235767
 USA_Y_MIN, USA_Y_MAX =  2632019,   6446276
 
-DOT_LIMIT = 999999999
+DOT_LIMIT = 15000
 
 TILE_URL    = "https://basemaps.cartocdn.com/dark_all/{z}/{x}/{y}.png"
 SAT_URL     = "https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}"
