@@ -92,7 +92,7 @@ USA_Y_MIN, USA_Y_MAX =  2632019,   6446276
 
 DOT_LIMIT = 15000
 
-TILE_URL    = "https://basemaps.cartocdn.com/dark_all/{z}/{x}/{y}.png"
+TILE_URL    = "https://server.arcgisonline.com/ArcGIS/rest/services/Canvas/World_Dark_Gray_Base/MapServer/tile/{z}/{y}/{x}"
 SAT_URL     = "https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}"
 STREET_URL  = "https://basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}.png"
 
