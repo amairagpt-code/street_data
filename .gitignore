@@ -10,3 +10,4 @@ __pycache__/
 .local/
 snap/
 nginx-default.bak
+.git-credentials
