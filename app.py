@@ -3,6 +3,8 @@ import math
 import requests
 import pandas as pd
 import numpy as np
+import os
+GMAPS_KEY = os.environ.get("GOOGLE_MAPS_API_KEY", "")
 from bokeh.plotting import figure, curdoc
 from bokeh.models import (
     ColumnDataSource, HoverTool, Select, WMTSTileSource,
@@ -88,9 +90,25 @@ default_5yr = years_5yr[-1] if years_5yr else f"{min_year}-{max_year}"
 USA_X_MIN, USA_X_MAX = -14471534, -7235767
 USA_Y_MIN, USA_Y_MAX =  2632019,   6446276
 
-DOT_LIMIT = 50000
+DOT_LIMIT = 999999999
 
 TILE_URL    = "https://basemaps.cartocdn.com/dark_all/{z}/{x}/{y}.png"
+SAT_URL     = "https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}"
+STREET_URL  = "https://basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}.png"
+
+TILE_OPTIONS = {
+    "Dark (Default)": TILE_URL,
+    "Satellite":      SAT_URL,
+    "Street Map":     STREET_URL,
+}
+SAT_URL     = "https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}"
+STREET_URL  = "https://basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}.png"
+
+TILE_OPTIONS = {
+    "Dark (Default)": TILE_URL,
+    "Satellite":      SAT_URL,
+    "Street Map":     STREET_URL,
+}
 DARK_BG     = "#0d0d1a"
 DARK_PANEL  = "#1a1a2e"
 DARK_BORDER = "#2a2a4a"
@@ -128,7 +146,9 @@ def make_map(title_text):
         sizing_mode="stretch_both",
         tools="pan,wheel_zoom,box_zoom,reset", active_scroll="wheel_zoom"
     )
-    p.add_tile(WMTSTileSource(url=TILE_URL))
+    t_dark   = p.add_tile(WMTSTileSource(url=TILE_URL));   t_dark.visible   = True
+    t_sat    = p.add_tile(WMTSTileSource(url=SAT_URL));    t_sat.visible    = False
+    t_street = p.add_tile(WMTSTileSource(url=STREET_URL)); t_street.visible = False
     p.axis.visible = False
     p.grid.visible = False
     p.background_fill_color = "#1a1a1a"
@@ -157,7 +177,7 @@ def add_hover(p, source, info_div):
         selection_line_color="#4a90d9",
         selection_line_width=1
     )
-    tap_cb = CustomJS(args=dict(source=source, div=info_div), code="""
+    tap_cb = CustomJS(args=dict(source=source, div=info_div, apiKey=GMAPS_KEY), code="""
         const idx = source.selected.indices;
         if (idx.length === 0) { div.text = ""; return; }
 
@@ -176,7 +196,6 @@ def add_hover(p, source, info_div):
         const lng = (x / k) * (180 / Math.PI);
         const lat = (2 * Math.atan(Math.exp(y / k)) - Math.PI / 2) * (180 / Math.PI);
 
-        const apiKey = "AIzaSyAh1f2MC_LgXkyMOewvsEK21fdGiJL8jUY";
         const svThumb = "https://maps.googleapis.com/maps/api/streetview?size=400x220&location=" + lat + "," + lng + "&fov=80&heading=70&pitch=0&key=" + apiKey;
 
         function mkRow(label, value, color) {
@@ -372,14 +391,22 @@ def refresh_tour_card():
     title, desc, color = TOUR_STEPS[i]
     n   = len(TOUR_STEPS)
     pct = int((i + 1) / n * 100)
+    dots = "".join(
+        f'<span style="display:inline-block;width:10px;height:10px;border-radius:50%;margin:0 4px;background:{"#4a90d9" if j == i else "#2a2a4a"};transition:background 0.3s;"></span>'
+        for j in range(n)
+    )
     tour_card_div.text = (
-        f'<div style="font-family:sans-serif;text-align:center;padding:48px 40px 24px;max-width:860px;margin:0 auto;">' 
-        f'<p style="color:#555;font-size:13px;text-transform:uppercase;letter-spacing:0.12em;margin:0 0 16px;">Step {i+1} of {n}</p>'
-        f'<h2 style="color:{color};font-size:clamp(26px,3.5vw,48px);font-weight:700;margin:0 0 20px;line-height:1.2;max-width:800px;">{title}</h2>'
-        f'<p style="color:#ccc;font-size:clamp(15px,1.8vw,21px);line-height:1.8;margin:0 0 28px;max-width:720px;">{desc}</p>'
-        f'<div style="background:#1e1e3a;border-radius:10px;height:6px;overflow:hidden;margin-bottom:10px;width:min(560px,80%);margin-left:auto;margin-right:auto;">' 
-        f'<div style="background:{color};width:{pct}%;height:100%;border-radius:10px;transition:width 0.3s;"></div></div>'
-        f'<p style="color:#555;font-size:12px;margin:0;">{pct}% complete</p>'
+        f'<div style="font-family:sans-serif;text-align:center;padding:40px 40px 20px;max-width:900px;margin:0 auto;">'
+        f'<div style="display:inline-block;background:#1a1a2e;border:1px solid #2a2a4a;border-radius:20px;padding:4px 14px;margin-bottom:24px;">'
+        f'<span style="color:#4a90d9;font-size:11px;text-transform:uppercase;letter-spacing:0.12em;font-weight:600;">Step {i+1} of {n}</span></div>'
+        f'<h2 style="color:{color};font-size:clamp(24px,3vw,44px);font-weight:700;margin:0 0 18px;line-height:1.2;">{title}</h2>'
+        f'<div style="width:60px;height:3px;background:{color};border-radius:2px;margin:0 auto 24px;"></div>'
+        f'<p style="color:#bbb;font-size:clamp(14px,1.6vw,19px);line-height:1.9;margin:0 auto 32px;max-width:680px;">{desc}</p>'
+        f'<div style="margin-bottom:20px;">{dots}</div>'
+        f'<div style="background:#111827;border:1px solid #1e1e3a;border-radius:12px;padding:10px 20px;display:inline-block;">'
+        f'<div style="background:#1e1e3a;border-radius:8px;height:4px;width:200px;overflow:hidden;">'
+        f'<div style="background:{color};width:{pct}%;height:100%;border-radius:8px;transition:width 0.4s;"></div></div>'
+        f'<p style="color:#555;font-size:11px;margin:6px 0 0;">{pct}% complete</p></div>'
         f'</div>'
     )
     tour_back_btn.visible = i > 0
@@ -424,11 +451,10 @@ tour_layout = column(
 
 W = 200
 
-p1 = make_map("FARS Fatal Accident Visualization")
+p1 = make_map("FARS Crashes Heatmap")
 s1 = make_source()
 
-info_div1 = Div(width=W, text='<p style="color:#333;font-size:11px;font-family:sans-serif;padding:8px 10px;margin:0;">Click any dot on the map</p>',
-                styles={"background":"#111827","border-radius":"8px","border":"1px solid #1e1e3a","min-height":"300px"})
+info_div1 = Div(width=W, text="", styles={"background":"transparent","border":"none","min-height":"0px"})
 add_hover(p1, s1, info_div1)
 
 address_input = style(TextInput(title="Search Location", placeholder="Search address or city..."))
@@ -439,7 +465,24 @@ sel_ped1      = style(Select(title="Pedestrian", value="All", options=["All","Pe
 sel_bike1     = style(Select(title="Cyclist", value="All", options=["All","Cyclist Involved","No Cyclist"]))
 sel_age1      = style(Select(title="Age Group", value="All", options=["All","Child (0-15)","Youth (16-20)","Adult (21-59)","Older Adult (60+)"]))
 sel_norm1     = style(Select(title="View As", value="Raw Count", options=["Raw Count","Per 100k People"]))
-hour_slider1  = style(RangeSlider(start=0, end=23, value=(0,23), step=1, title="Hour Range"))
+hour_slider1  = style(RangeSlider(start=0, end=23, value=(0,23), step=1, title="Time of Day"))
+hour_slider1.stylesheets.append("""
+    :host .bk-slider-title { color: #e0e0e0 !important; font-size: 11px !important; }
+    :host .bk-input-group { color: #e0e0e0 !important; }
+    :host .noUi-tooltip { 
+        background: #1a1a2e !important; 
+        color: #e0e0e0 !important; 
+        border: 1px solid #2a2a4a !important;
+        border-radius: 6px !important;
+        font-size: 11px !important;
+        padding: 2px 6px !important;
+        display: block !important;
+    }
+    :host .noUi-handle { background: #4a90d9 !important; border: none !important; border-radius: 50% !important; box-shadow: none !important; }
+    :host .noUi-connect { background: #4a90d9 !important; }
+    :host .noUi-base, :host .noUi-target { background: #2a2a4a !important; border: none !important; border-radius: 4px !important; }
+""")
+sel_map_style = style(Select(title="Map Style", value="Dark (Default)", options=list(TILE_OPTIONS.keys())))
 
 stats_div = Div(width=W, text="", styles={
     "background": "#111827", "border-radius": "8px",
@@ -486,7 +529,12 @@ def update1(attr, old, new):
     else:
         stats_div.text    = ""
         stats_div.visible = False
-    s1.data = to_source(t)
+    s1.data = to_source(t, limit=(sel_state1.value == "All"))
+    style_map = {"Dark (Default)": 0, "Satellite": 1, "Street Map": 2}
+    chosen = style_map.get(sel_map_style.value, 0)
+    tile_renderers = [r for r in p1.renderers if hasattr(r, "tile_source")]
+    for idx, tr in enumerate(tile_renderers):
+        tr.visible = (idx == chosen)
 
 def search_address():
     addr = address_input.value.strip()
@@ -513,7 +561,7 @@ def search_address():
         print(f"Search error: {e}")
 
 address_input.on_change("value", lambda a, o, n: search_address())
-for w in [sel_year1, sel_state1, sel_drunk1, sel_ped1, sel_bike1, sel_age1, sel_norm1]:
+for w in [sel_year1, sel_state1, sel_drunk1, sel_ped1, sel_bike1, sel_age1, sel_norm1, sel_map_style]:
     w.on_change("value", update1)
 hour_slider1.on_change("value_throttled", update1)
 
@@ -531,7 +579,8 @@ sidebar1 = column(
     Div(width=W, text='<p style="color:#555;font-size:10px;font-family:sans-serif;text-transform:uppercase;letter-spacing:0.05em;margin:10px 0 4px;">Click a dot to inspect</p>'),
     info_div1, divider(),
     Div(text='<p style="color:#555;font-size:11px;font-family:sans-serif;text-transform:uppercase;letter-spacing:0.05em;margin:10px 0 8px;font-weight:bold;">Filters</p>'),
-    sel_year1, sel_state1, sel_drunk1, sel_ped1, sel_bike1, sel_age1, sel_norm1, hour_slider1,
+    sel_map_style, sel_year1, sel_state1, sel_drunk1, sel_ped1, sel_bike1, sel_age1, sel_norm1, hour_slider1,
+    Div(width=200, text='<div style="display:flex;justify-content:space-between;font-family:sans-serif;color:#555;font-size:10px;margin-top:-6px;padding:0 2px;"><span>0</span><span>12</span><span>24</span></div>'),
     width=220, sizing_mode="fixed",
     styles={"background":DARK_BG,"padding":"16px 14px","overflow-y":"auto","height":"100vh","border-right":"1px solid #1e1e3a","box-sizing":"border-box"}
 )
@@ -1028,5 +1077,5 @@ LOADING_TEMPLATE = Template("""
 
 curdoc().template = LOADING_TEMPLATE
 curdoc().add_root(tabs)
-curdoc().title = "FARS Map"
+curdoc().title = "FARS Crashes Heatmap"
 #testing 
